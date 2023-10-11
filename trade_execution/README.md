@@ -1,0 +1,2 @@
+- Make sure to have the 4 `.npy` file in the same directory as the main notebook before running the notebook.
+- Make sure to have `TSLA.csv` in the same directory as the main notebook before running the notebook.
