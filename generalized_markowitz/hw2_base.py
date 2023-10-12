@@ -103,13 +103,15 @@ def objective(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -
     return drift + risk
 
 
-def grad(ret: np.ndarray, pi: float, theta: float) -> np.ndarray:
+def grad(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -> np.ndarray:
     """
     Task 1: the objective function gradient
 
 
     Parameters
     --------------
+    portfolio: np.ndarray: the portfolio vector i.e. x
+
     ret: np.ndarray: the (T, 3) numpy array containing all asset returns
 
     pi: float: the exponent parameter of the objective
@@ -121,11 +123,17 @@ def grad(ret: np.ndarray, pi: float, theta: float) -> np.ndarray:
     --------------
     float: the objective gradient vector
     """
-    # TODO: Task for human: compute gradient in vector calculus.
-
-    # TODO: implement aforementioned computation result.
-    pass
-
+    T = ret.shape[0]
+    ret_mu = ret.mean(axis=0)
+    delta = ret - ret_mu
+    dev = delta.dot(portfolio)
+    nom = dev * np.absolute(dev)**(pi-2)
+    # p-norm involves abs
+    denom = ((np.absolute(dev)**pi).sum())**(1-1/pi)
+    return -ret_mu + (
+        (theta / T**(1/pi))*nom/denom
+    ).dot(delta)
+    
 
 def step_grad_desc(
     learning_rate: float = 0.05,
