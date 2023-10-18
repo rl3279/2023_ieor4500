@@ -67,7 +67,7 @@ def read_all(data_dir: str, T: int = 100) -> Tuple[np.ndarray, np.ndarray]:
     pass
 
 
-def objective(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -> float:
+def evalfunc(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -> float:
     """
     Task 1: the objective function
     (Remember to vectorize as much as possible)
@@ -103,7 +103,7 @@ def objective(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -
     return drift + risk
 
 
-def grad(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -> np.ndarray:
+def evalgrad(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -> np.ndarray:
     """
     Task 1: the objective function gradient
 
@@ -133,29 +133,63 @@ def grad(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -> np.
     return -ret_mu + (
         (theta / T**(1/pi))*nom/denom
     ).dot(delta)
-    
 
-def step_grad_desc(
-    learning_rate: float = 0.05,
-    backtrack: bool = True,
-    bt_a: float = None,
-    bt_b: float = None,
-    momentum: bool = False
+
+def backtrack(
+    x, ret, pi, theta, fval, grad, delta,
+    alpha=0.5, beta=0.75
 ):
-    """
-    Task 1: one step of the gradient descent algorithm.
-    """
-    pass
+    grad_dot_delta = grad.dot(delta)
+    step = 1
+    goon = True
+    success = False
+    # print("In backtracking:")
+    # print("\talpha =",alpha, "beta =",beta)
+    # print("\tgrad_dot_delta =,", grad_dot_delta)
+    while goon:
+        fnew = evalfunc(x + step * delta, ret, pi, theta)
+        target = alpha * step * grad_dot_delta
+        # print("\t\ttarget:", target)
+        # print("\t\timprovement:", fnew - fval)
+        if fnew - fval <= target:
+            goon = False
+            success = True
+        else:
+            step *= beta
+        if step < 1e-20:
+            goon = False
+    return step, success
+
+
+def get_descent(
+    x: np.ndarray,
+    step: float,
+    grad: np.ndarray,
+    momentum: bool = False,
+    olddelta: np.ndarray = None,
+    mu: float = None
+) -> np.ndarray:
+    if not momentum:
+        return - step * grad
+    else:
+        assert (olddelta is not None) and (mu is not None)
+        return -step * grad + (1-mu) * olddelta
 
 
 def run_grad_desc(
-    max_iter: int = 1000,
-    learning_rate: float = 0.05,
-    backtrack: bool = True,
+    x: np.ndarray,
+    ret: np.ndarray,
+    pi: float,
+    theta: float,
+    x_history: np.ndarray,
+    f_history: np.ndarray,
+    bt: bool = True,
     bt_a: float = None,
     bt_b: float = None,
     momentum: bool = False,
-    mom_mu: float = None
+    mom_mu: float = None,
+    max_iter: int = 1000,
+    step: float = 0.05,
 ) -> Tuple[bool, np.ndarray]:
     """
     Task 1: run gradient descent algorithm to compute optimal portfolio vector
@@ -163,9 +197,19 @@ def run_grad_desc(
 
     Parameters
     --------------
-    max_iter: int: iteration limit. Algorithm halts if number of iteration exceeds max_iter.
+    x: np.ndarray: portfolio weights
 
-    backtrack: bool: flag for backtracking to obtain adaptive learning rate.
+    ret: return data
+
+    pi: float: the exponent parameter of the objective
+
+    theta: float: the risk-aversion parameter of the objective
+
+    x_history: np.ndarray: vector to store portfolio weights
+
+    f_history: np.ndarray: vector to store objective values
+
+    bt: bool: flag for backtracking to obtain adaptive learning rate.
 
     bt_a: float: the backtracking alpha (acceptance threshold) parameter.
 
@@ -175,12 +219,40 @@ def run_grad_desc(
 
     mom_mu: float: the momentum memory parameter.
 
+    max_iter: int: iteration limit. Algorithm halts if number of iteration exceeds max_iter.
+
+    step: float: contant step size if backtrack is disabled
+
 
     Returns
     --------------
     Tuple[bool, np.ndarray]: a flag for successful convergence and the computed portfolio vector.
     """
-    pass
+    converged = False
+    iter = 0
+    descent = np.zeros_like(x)
+    while iter < max_iter:
+        x_history[iter] = x
+        fval = evalfunc(x, ret, pi, theta)
+        grad = evalgrad(x, ret, pi, theta)
+        f_history[iter] = fval
+        if bt:
+            step, goodstep = backtrack(
+                x, ret, pi, theta, fval, grad, -grad, bt_a, bt_b)
+        else:
+            goodstep = True
+        descent = get_descent(x, step, grad, momentum, descent, mom_mu)
+        # print(f"iter {iter}, goodstep: {goodstep}")
+        if goodstep:
+            x += descent
+            if (grad * grad).sum() < 1e-8:
+                converged = True
+                break
+            else:
+                if iter % 100 == 0:
+                    print(f"grad {iter} = {grad}")
+        iter += 1
+    return iter, converged
 
 
 # Task 2
