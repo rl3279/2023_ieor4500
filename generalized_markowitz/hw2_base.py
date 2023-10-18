@@ -1,3 +1,4 @@
+import datetime
 import numpy as np
 import pandas as pd
 from typing import Tuple
@@ -5,44 +6,82 @@ from typing import Tuple
 # Task 1
 
 
-def read_asset(csv_path: str, return_price: bool) -> pd.DataFrame:
+def is_open_or_noon(dt: datetime.datetime) -> bool:
+    t = dt.time()
+    return t == datetime.time(9,30) or t == datetime.time(12,0)
+
+def is_open(dt:datetime.datetime) -> bool:
+    return dt.time() == datetime.time(9,30)
+
+def my_dt_parser(s: str) -> datetime.datetime:
+    """
+    parser for IEOR4500 intraday tick price files.
+
+    This is 6 times faster than pd.DatetimeIndex.
+    """
+    date, time = s.split()
+    m, d, y = date.split("/")
+    H, M = time.split(":")
+    return datetime.datetime(
+        year = 2000 + int(y),
+        month = int(m),
+        day = int(d),
+        hour = int(H),
+        minute = int(M)
+    )
+
+def read_asset(asset:str, data_dir: str="../data/") -> pd.DataFrame:
     """
     Task 1: reads a single asset.
 
 
     Parameters
     --------------
-    csv_path: str: relative path of the csv file containing desired asset.
+    asset: str: asset name e.g. "AMZN"
 
-    return_price: bool: flag to return price along with returns. This is
-    needed for test data for computing number of shares to trade at market open.
-
+    data_dir: str: your local folder contaning .csv files
 
     Returns
     --------------
     pd.DataFrame: pandas dataframe containing asset returns
     """
     # read csv
-    df = pd.read_csv(csv_path)
+    csv_path = data_dir + asset + ".csv"
+    df = pd.read_csv(csv_path, header=3).loc[:, ["Dates", "Close"]]
+    # read up to empty entries
+    df = df.iloc[:df["Close"].isna().argmax()]
+    
+    # manual hard-coding processing
+    if asset == "NFLX":
+        df.loc[0, "Dates"] = "2/1/21 9:30"
+    elif asset == "AMZN":
+        df.loc[0, "Dates"] = "1/4/21 9:30"
+        # two missing Close on 2021-04-20 and 2021-06-14. Backfill using 12:01 data
+        missing = ["4/20/21 12:00", "6/14/21 12:00"]
+        df = pd.concat([df, pd.DataFrame([[m, np.nan] for m in missing], columns = df.columns)], ignore_index=True)
+        df.sort_values(by = "Dates")
+        df.fillna(method="backfill")
 
-    # TODO: parse date and time into separate columns
+    # extract open or noon data
+    df["dt"] = df["Dates"].apply(my_dt_parser)
+    df["Date"] = df["dt"].apply(lambda dt: dt.date())
+    open_or_noon = df["dt"].apply(is_open_or_noon)
+    df = df.loc[open_or_noon]
 
-    # TODO: extract only price column
+    # compute daily return
+    ret = df.loc[:, ["Close","Date"]].groupby("Date").pct_change().values
+    ret = ret[~np.isnan(ret)]
 
-    # TODO: filter out only mkt open and noon ticks of each day
-
-    # TODO: get returns using groupby. At this point date column be a unique identifier
-
-    # TODO: set date to be index
-
-    # TODO: return a dataframe of only returns and date index if
-    # return_price is false
-
-    # TODO: if return_price is True, return both the returns df and the price df
-    pass
+    # return along with daily open price
+    df = df.loc[df["dt"].apply(is_open)]
+    df["ret"] = ret
+    df.set_index("Date", inplace=True)
+    df = df[["ret", "Close"]]
+    df.rename(columns = {"ret": f"{asset}_ret", "Close": f"{asset}_price"}, inplace = True)
+    return df
 
 
-def read_all(data_dir: str, T: int = 100) -> Tuple[np.ndarray, np.ndarray]:
+def read_all(data_dir: str = "../data/", T: int = 100) -> Tuple[np.ndarray, np.ndarray]:
     """
     Task 1.5: reads all asset returns and sever into train and test.
 
@@ -57,14 +96,14 @@ def read_all(data_dir: str, T: int = 100) -> Tuple[np.ndarray, np.ndarray]:
     pd.DataFrame: pandas dataframe containing asset returns
     """
     assets = ["AMZN", "NFLX", "TSLA"]
-    # TODO: call read_asset three times to get all three return dfs
 
-    # TODO: inner merge on date index, name each column using asset names
+    dfs = [read_asset(asset, data_dir) for asset in assets]
 
-    # TODO: using .iloc to slice the dataframe into train and test
+    df = dfs[0]
+    for i in range(1, 3):
+        df = df.join(dfs[i])
 
-    # TODO: return df.values for train and test
-    pass
+    return df.dropna()
 
 
 def evalfunc(portfolio: np.ndarray, ret: np.ndarray, pi: float, theta: float) -> float:
