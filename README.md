@@ -7,7 +7,8 @@
 
 # Projects
 - Project 1: Trade Execution (Sep-Oct 2023) Dynamic programming for trade execution. 
-- Project 2: Modified Markowitz Portfolio Optimization
+- Project 2: Modified Markowitz Portfolio Optimization.
+- Project 3: Data corruption detection using Principal Component Analysis (PCA).
 
 
 *Git Repo contribution does not reflect the actual individual contribution of each group member.
